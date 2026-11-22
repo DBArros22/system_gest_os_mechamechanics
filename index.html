@@ -1,1 +1,432 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>MC Motos | Gestão & OS - TinyDesk Solutions</title>
+  <link rel="stylesheet" href="style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+</head>
+<body>
 
+  <!-- TELA DE BLOQUEIO SAAS (LICENÇA MENSAL) -->
+  <div id="license-overlay" class="overlay hidden">
+    <div class="license-card">
+      <div class="brand-badge">TINYDESK SOLUTIONS</div>
+      <h2>Assinatura Expirada</h2>
+      <p>O acesso mensal do sistema <strong>MC Motos</strong> precisa ser renovado. Insira a chave de liberação fornecida pelo suporte.</p>
+      <input type="text" id="license-input" placeholder="Ex: MCMOTOS-2026-PRO">
+      <button onclick="activateLicense()" class="btn-primary w-full">Liberar Acesso</button>
+      <small id="license-msg" class="error-text"></small>
+    </div>
+  </div>
+
+  <!-- MODAL DE IMPRESSÃO / VISUALIZAÇÃO DE OS -->
+  <div id="os-print-modal" class="overlay hidden">
+    <div class="print-container">
+      <div class="no-print modal-actions">
+        <button onclick="window.print()" class="btn-primary">🖨️ Imprimir / Salvar PDF</button>
+        <button onclick="closePrintModal()" class="btn-secondary">Fechar</button>
+      </div>
+      <div id="os-printable-area" class="os-sheet">
+        <!-- Conteúdo da OS injetado via JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- BARRA LATERAL / NAVEGAÇÃO -->
+  <div class="app-layout">
+    <aside class="sidebar">
+      <div class="logo-area">
+        <div id="logo-placeholder" class="logo-box">MC</div>
+        <div>
+          <h1>MC Motos</h1>
+          <span>Oficina & Peças</span>
+        </div>
+      </div>
+
+      <nav class="nav-menu">
+        <button class="nav-btn active" onclick="navigate('dashboard')">📊 Painel & Fechamento</button>
+        <button class="nav-btn" onclick="navigate('os')">🔧 Ordem de Serviço (OS)</button>
+        <button class="nav-btn" onclick="navigate('estoque')">📦 Estoque & Entradas</button>
+        <button class="nav-btn" onclick="navigate('saidas')">📉 Saídas & Ocorrências</button>
+        <button class="nav-btn" onclick="navigate('ranking')">🏆 Ranking & Filtros</button>
+      </nav>
+
+      <div class="sidebar-footer" onclick="triggerDevPanel()">
+        <small>Desenvolvido por</small>
+        <strong>TinyDesk Solutions</strong>
+        <span id="license-status-badge" class="status-ok">Licença Ativa</span>
+      </div>
+    </aside>
+
+    <!-- CONTEÚDO PRINCIPAL -->
+    <main class="main-content">
+      
+      <!-- 1. DASHBOARD & FECHAMENTO QUINZENAL -->
+      <section id="view-dashboard" class="view active">
+        <header class="view-header">
+          <div>
+            <h2>Fechamento Financeiro</h2>
+            <p>Acompanhamento quinzenal, margem de lucro e resumo diário</p>
+          </div>
+          <div class="filter-group">
+            <input type="month" id="dash-month" onchange="renderDashboard()">
+            <select id="dash-period" onchange="renderDashboard()">
+              <option value="q1">1ª Quinzena (01 a 15)</option>
+              <option value="q2">2ª Quinzena (16 a 31)</option>
+              <option value="all" selected>Mês Completo</option>
+            </select>
+          </div>
+        </header>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <span>Faturamento Bruto (OS + Vendas)</span>
+            <strong id="kpi-faturamento">R$ 0,00</strong>
+          </div>
+          <div class="kpi-card">
+            <span>Custo de Peças + Perdas</span>
+            <strong id="kpi-custos" class="text-danger">R$ 0,00</strong>
+          </div>
+          <div class="kpi-card">
+            <span>Lucro Líquido</span>
+            <strong id="kpi-lucro" class="text-success">R$ 0,00</strong>
+          </div>
+          <div class="kpi-card">
+            <span>Margem de Lucro</span>
+            <strong id="kpi-margem">0%</strong>
+          </div>
+        </div>
+
+        <div class="card mt-20">
+          <h3>Detalhamento Diário no Período</h3>
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Data</th>
+                  <th>Qtd. OS / Vendas</th>
+                  <th>Faturamento</th>
+                  <th>Custos / Avarias</th>
+                  <th>Lucro do Dia</th>
+                  <th>Margem</th>
+                </tr>
+              </thead>
+              <tbody id="daily-breakdown-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. ORDEM DE SERVIÇO (OS) -->
+      <section id="view-os" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Gerador de Ordem de Serviço</h2>
+            <p>Registre serviços, adicione peças do estoque e emita a OS do cliente</p>
+          </div>
+        </header>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Nova Ordem de Serviço</h3>
+            <div class="form-row">
+              <div class="form-group">
+                <label>Cliente</label>
+                <input type="text" id="os-cliente" placeholder="Nome do cliente">
+              </div>
+              <div class="form-group">
+                <label>Moto / Placa</label>
+                <input type="text" id="os-moto" placeholder="Ex: CG 160 Titan - ABC1D23">
+              </div>
+            </div>
+
+            <div class="form-row">
+              <div class="form-group">
+                <label>Descrição do Serviço (Mão de Obra)</label>
+                <input type="text" id="os-servico-desc" placeholder="Ex: Troca de relação e revisão de freios">
+              </div>
+              <div class="form-group">
+                <label>Valor Mão de Obra (R$)</label>
+                <input type="number" id="os-mao-obra" value="0" min="0" step="0.01" oninput="updateOSTotal()">
+              </div>
+            </div>
+
+            <div class="form-group autocomplete-wrapper">
+              <label>Adicionar Peça do Estoque (Nome ou Código)</label>
+              <div class="inline-input">
+                <input type="text" id="os-part-search" placeholder="Digite 'PEC-001' ou 'Óleo'..." oninput="suggestOSParts()" autocomplete="off">
+                <input type="number" id="os-part-qty" value="1" min="1" style="width: 80px;">
+                <button type="button" onclick="addPartToOS()" class="btn-secondary">+ Add</button>
+              </div>
+              <ul id="os-suggestions" class="suggestions-list hidden"></ul>
+            </div>
+
+            <div class="os-items-box">
+              <h4>Peças Incluídas na OS</h4>
+              <ul id="os-selected-parts"></ul>
+            </div>
+
+            <div class="os-total-bar">
+              <span>Total Final da OS:</span>
+              <strong id="os-total-display">R$ 0,00</strong>
+            </div>
+
+            <button onclick="finalizeOS()" class="btn-primary w-full mt-10">Finalizar OS & Dar Baixa no Estoque</button>
+          </div>
+
+          <div class="card">
+            <h3>Histórico de Ordens de Serviço</h3>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Código</th>
+                    <th>Data</th>
+                    <th>Cliente / Moto</th>
+                    <th>Total</th>
+                    <th>Ação</th>
+                  </tr>
+                </thead>
+                <tbody id="os-history-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. ESTOQUE & ENTRADAS -->
+      <section id="view-estoque" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Controle de Estoque</h2>
+            <p>Cadastro com código automático e reposição rápida de mercadorias</p>
+          </div>
+        </header>
+
+        <div class="grid-2">
+          <!-- Cadastro de Novo Produto -->
+          <div class="card">
+            <h3>Cadastrar Nova Peça</h3>
+            <form onsubmit="registerProduct(event)">
+              <div class="form-group">
+                <label>Nome da Peça</label>
+                <input type="text" id="prod-nome" required placeholder="Ex: Kit Relação Honda CG 160">
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Preço de Custo (R$)</label>
+                  <input type="number" id="prod-custo" step="0.01" required>
+                </div>
+                <div class="form-group">
+                  <label>Preço de Venda (R$)</label>
+                  <input type="number" id="prod-venda" step="0.01" required>
+                </div>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Qtd. Inicial</label>
+                  <input type="number" id="prod-qtd" required min="0">
+                </div>
+                <div class="form-group">
+                  <label>Estoque Mínimo (Alerta)</label>
+                  <input type="number" id="prod-min" value="2" min="1">
+                </div>
+              </div>
+              <button type="submit" class="btn-primary w-full">Cadastrar Peça (Gerar Código)</button>
+            </form>
+          </div>
+
+          <!-- Entrada Automática de Estoque -->
+          <div class="card">
+            <h3>Registrar Entrada de Estoque (Reposição)</h3>
+            <form onsubmit="registerStockEntry(event)">
+              <div class="form-group">
+                <label>Selecione a Peça</label>
+                <select id="entry-prod-select" required></select>
+              </div>
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Quantidade Recebida</label>
+                  <input type="number" id="entry-qty" min="1" required>
+                </div>
+                <div class="form-group">
+                  <label>Novo Custo Unitário (Opcional)</label>
+                  <input type="number" id="entry-cost" step="0.01" placeholder="Manter atual">
+                </div>
+              </div>
+              <button type="submit" class="btn-secondary w-full">Confirmar Entrada no Estoque</button>
+            </form>
+          </div>
+        </div>
+
+        <!-- Consulta de Estoque com Sugestão -->
+        <div class="card mt-20">
+          <div class="search-header">
+            <h3>Consulta de Produtos em Estoque</h3>
+            <div class="autocomplete-wrapper" style="min-width: 300px;">
+              <input type="text" id="stock-search-input" placeholder="Buscar por nome ou código (Ex: PEC-002)..." oninput="filterStockTable()" autocomplete="off">
+              <ul id="stock-suggestions" class="suggestions-list hidden"></ul>
+            </div>
+          </div>
+
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th>Cód. Interno</th>
+                  <th>Produto</th>
+                  <th>Custo</th>
+                  <th>Venda</th>
+                  <th>Saldo</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody id="stock-table-body"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- 4. SAÍDAS & OCORRÊNCIAS ATÍPICAS -->
+      <section id="view-saidas" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Registro de Saídas & Ocorrências</h2>
+            <p>Venda avulsa, avarias, insumos internos ou ressarcimento de danos ao cliente</p>
+          </div>
+        </header>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>Lançar Movimentação de Saída</h3>
+            <form onsubmit="registerStockExit(event)">
+              <div class="form-group">
+                <label>Tipo de Saída</label>
+                <select id="exit-type" required onchange="toggleExitFields()">
+                  <option value="venda">Venda Avulsa (Balcão)</option>
+                  <option value="insumo">Uso como Insumo Interno (Oficina)</option>
+                  <option value="avaria">Avaria / Peça Danificada no Estoque</option>
+                  <option value="ressarcimento">Ressarcimento ao Cliente (Imprevisto)</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Peça Utilizada (ou deixe vazio se for ressarcimento financeiro)</label>
+                <select id="exit-prod-select"></select>
+              </div>
+
+              <div class="form-row">
+                <div class="form-group">
+                  <label>Quantidade</label>
+                  <input type="number" id="exit-qty" value="1" min="1" required>
+                </div>
+                <div class="form-group" id="exit-extra-cost-group" style="display:none;">
+                  <label>Custo Extra do Ressarcimento (R$)</label>
+                  <input type="number" id="exit-extra-cost" step="0.01" value="0">
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>Observação / Motivo Detalhado</label>
+                <input type="text" id="exit-obs" placeholder="Ex: Carenagem riscada durante manobra, peça reposta" required>
+              </div>
+
+              <button type="submit" class="btn-primary w-full">Registrar Saída</button>
+            </form>
+          </div>
+
+          <div class="card">
+            <h3>Histórico de Saídas e Ocorrências</h3>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Data</th>
+                    <th>Tipo</th>
+                    <th>Item / Motivo</th>
+                    <th>Qtd</th>
+                    <th>Impacto R$</th>
+                  </tr>
+                </thead>
+                <tbody id="exits-history-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 5. RANKING & FILTROS AVANÇADOS -->
+      <section id="view-ranking" class="view">
+        <header class="view-header">
+          <div>
+            <h2>Ranking de Vendas & Filtro por Data</h2>
+            <p>Analise os dias mais lucrativos e as peças com maior giro</p>
+          </div>
+          <div class="filter-group">
+            <input type="date" id="rank-date-filter" onchange="renderRanking()">
+            <button onclick="clearRankDate()" class="btn-secondary">Todas as Datas</button>
+          </div>
+        </header>
+
+        <div class="grid-2">
+          <div class="card">
+            <h3>🏆 Ranking de Dias por Faturamento</h3>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Posição</th>
+                    <th>Data</th>
+                    <th>Total Vendido (Peças + OS)</th>
+                  </tr>
+                </thead>
+                <tbody id="rank-days-body"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card">
+            <h3>🔥 Peças Mais Vendidas / Utilizadas</h3>
+            <div class="table-responsive">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Cód.</th>
+                    <th>Peça</th>
+                    <th>Qtd. Saída</th>
+                    <th>Receita Gerada</th>
+                  </tr>
+                </thead>
+                <tbody id="rank-products-body"></tbody>
+              </table>
+            </div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- PAINEL SECRETO DO PROGRAMADOR (TINYDESK) -->
+  <div id="dev-modal" class="overlay hidden">
+    <div class="license-card">
+      <div class="brand-badge">PAINEL DO DESENVOLVEDOR</div>
+      <h3>Gestão SaaS - TinyDesk Solutions</h3>
+      <p>Controle de assinatura do cliente <strong>MC Motos</strong>.</p>
+      <div class="form-group" style="text-align:left;">
+        <label>Data de Vencimento da Mensalidade:</label>
+        <input type="date" id="dev-expiry-date">
+      </div>
+      <div class="form-row">
+        <button onclick="saveDevSettings()" class="btn-primary">Salvar Validade</button>
+        <button onclick="exportBackup()" class="btn-secondary">Backup JSON</button>
+      </div>
+      <button onclick="document.getElementById('dev-modal').classList.add('hidden')" class="btn-secondary w-full mt-10">Fechar</button>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
