@@ -66,64 +66,6 @@ function formatBRL(val) {
   return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 }
 
-// ==========================================
-// INICIALIZAÇÃO & CONTROLE SAAS (LICENÇA)
-// ==========================================
-window.onload = () => {
-  checkLicense();
-  document.getElementById('dash-month').value = getTodayISO().slice(0, 7);
-  refreshAllViews();
-};
-
-function checkLicense() {
-  const today = getTodayISO();
-  const overlay = document.getElementById('license-overlay');
-  const badge = document.getElementById('license-status-badge');
-
-  if (today > db.config.expiryDate) {
-    overlay.classList.remove('hidden');
-    badge.textContent = 'Licença Expirada';
-    badge.style.background = 'rgba(220,38,38,0.3)';
-    badge.style.color = '#fca5a5';
-  } else {
-    overlay.classList.add('hidden');
-    badge.textContent = `Ativo até ${db.config.expiryDate.split('-').reverse().join('/')}`;
-  }
-}
-
-function activateLicense() {
-  const input = document.getElementById('license-input').value.trim().toUpperCase();
-  // Chave padrão ou chave dinâmica no formato MCMOTOS-AAAA-MM-DD
-  if (input === db.config.masterKey || input.startsWith('MCMOTOS-202')) {
-    const nextMonth = new Date();
-    nextMonth.setDate(nextMonth.getDate() + 30);
-    db.config.expiryDate = nextMonth.toISOString().split('T')[0];
-    saveDB();
-    checkLicense();
-    alert('Licença renovada por 30 dias!');
-  } else {
-    document.getElementById('license-msg').textContent = 'Chave inválida. Contate a TinyDesk Solutions.';
-  }
-}
-
-function triggerDevPanel() {
-  devClicks++;
-  if (devClicks >= 5) {
-    devClicks = 0;
-    document.getElementById('dev-expiry-date').value = db.config.expiryDate;
-    document.getElementById('dev-modal').classList.remove('hidden');
-  }
-}
-
-function saveDevSettings() {
-  const newDate = document.getElementById('dev-expiry-date').value;
-  if (newDate) {
-    db.config.expiryDate = newDate;
-    saveDB();
-    checkLicense();
-    document.getElementById('dev-modal').classList.add('hidden');
-  }
-}
 
 function exportBackup() {
   const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
