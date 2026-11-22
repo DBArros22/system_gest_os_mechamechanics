@@ -14,7 +14,8 @@ const defaultData = {
     { id: 3, code: 'PEC-003', name: 'Pastilha de Freio Dianteira Cobreq', cost: 19.50, price: 45.00, qty: 10, min: 3 },
     { id: 4, code: 'PEC-004', name: 'Vela de Ignição NGK CPR8EA-9', cost: 18.00, price: 35.00, qty: 12, min: 4 },
     { id: 5, code: 'PEC-005', name: 'Câmara de Ar Aro 18 Pirelli', cost: 26.00, price: 50.00, qty: 8, min: 3 },
-    { id: 6, code: 'PEC-006', name: 'Filtro de Óleo Yamaha Fazer 250', cost: 15.00, price: 32.00, qty: 9, min: 3 }
+    { id: 6, code: 'PEC-006', name: 'Filtro de Óleo Yamaha Fazer 250', cost: 15.00, price: 32.00, qty: 9, min: 3 },
+    { id: 6, code: 'PEC-007', name: 'Kit relação Honda CG 125 FAN 2009 - 2013', cost: 15.00, price: 60, qty: 9, min: 3 }
   ],
   orders: [
     {
