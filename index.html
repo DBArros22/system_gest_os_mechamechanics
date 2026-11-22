@@ -9,6 +9,26 @@
 </head>
 <body>
 
+  <!-- TELA DE LOGIN (ACESSO RESTRITO FIREBASE AUTH) -->
+  <div id="login-overlay" class="overlay">
+    <div class="login-card">
+      <div class="brand-badge">MC MOTOS • ACESSO RESTRITO</div>
+      <h2>Entrar no Sistema</h2>
+      <p>Identifique-se para acessar o estoque, ordens de serviço e fechamento financeiro.</p>
+      <form onsubmit="handleLogin(event)">
+        <div class="form-group" style="text-align:left;">
+          <label>E-mail de Acesso</label>
+          <input type="email" id="login-email" required placeholder="oficina@mcmotos.com">
+        </div>
+        <div class="form-group" style="text-align:left;">
+          <label>Senha</label>
+          <input type="password" id="login-password" required placeholder="••••••••">
+        </div>
+        <button type="submit" id="btn-login" class="btn-primary w-full">Acessar Painel</button>
+      </form>
+      <small id="login-msg" class="error-text"></small>
+    </div>
+  </div>
 
   <!-- MODAL DE IMPRESSÃO / VISUALIZAÇÃO DE OS -->
   <div id="os-print-modal" class="overlay hidden">
@@ -17,14 +37,12 @@
         <button onclick="window.print()" class="btn-primary">🖨️ Imprimir / Salvar PDF</button>
         <button onclick="closePrintModal()" class="btn-secondary">Fechar</button>
       </div>
-      <div id="os-printable-area" class="os-sheet">
-        <!-- Conteúdo da OS injetado via JS -->
-      </div>
+      <div id="os-printable-area" class="os-sheet"></div>
     </div>
   </div>
 
-  <!-- BARRA LATERAL / NAVEGAÇÃO -->
-  <div class="app-layout">
+  <!-- LAYOUT PRINCIPAL -->
+  <div id="app-container" class="app-layout hidden">
     <aside class="sidebar">
       <div class="logo-area">
         <div id="logo-placeholder" class="logo-box">MC</div>
@@ -35,21 +53,20 @@
       </div>
 
       <nav class="nav-menu">
-        <button class="nav-btn active" onclick="navigate('dashboard')">📊 Painel & Fechamento</button>
-        <button class="nav-btn" onclick="navigate('os')">🔧 Ordem de Serviço (OS)</button>
-        <button class="nav-btn" onclick="navigate('estoque')">📦 Estoque & Entradas</button>
-        <button class="nav-btn" onclick="navigate('saidas')">📉 Saídas & Ocorrências</button>
-        <button class="nav-btn" onclick="navigate('ranking')">🏆 Ranking & Filtros</button>
+        <button class="nav-btn active" onclick="navigate('dashboard', this)">📊 Painel & Fechamento</button>
+        <button class="nav-btn" onclick="navigate('os', this)">🔧 Ordem de Serviço (OS)</button>
+        <button class="nav-btn" onclick="navigate('estoque', this)">📦 Estoque & Entradas</button>
+        <button class="nav-btn" onclick="navigate('saidas', this)">📉 Saídas & Ocorrências</button>
+        <button class="nav-btn" onclick="navigate('ranking', this)">🏆 Ranking & Filtros</button>
       </nav>
 
-      <div class="sidebar-footer" onclick="triggerDevPanel()">
+      <div class="sidebar-footer">
         <small>Desenvolvido por</small>
         <strong>TinyDesk Solutions</strong>
-        <span id="license-status-badge" class="status-ok">Licença Ativa</span>
+        <button onclick="handleLogout()" class="btn-logout mt-10">Sair do Sistema</button>
       </div>
     </aside>
 
-    <!-- CONTEÚDO PRINCIPAL -->
     <main class="main-content">
       
       <!-- 1. DASHBOARD & FECHAMENTO QUINZENAL -->
@@ -113,39 +130,44 @@
         <header class="view-header">
           <div>
             <h2>Gerador de Ordem de Serviço</h2>
-            <p>Registre serviços, adicione peças do estoque e emita a OS do cliente</p>
+            <p>Registre serviços, adicione peças do estoque e emita a OS com baixa automática</p>
           </div>
         </header>
 
         <div class="grid-2">
           <div class="card">
             <h3>Nova Ordem de Serviço</h3>
+            <div class="form-group">
+              <label>Nome do Cliente</label>
+              <input type="text" id="os-cliente" placeholder="Ex: João da Silva">
+            </div>
+
             <div class="form-row">
               <div class="form-group">
-                <label>Cliente</label>
-                <input type="text" id="os-cliente" placeholder="Nome do cliente">
+                <label>Modelo / Ano da Moto</label>
+                <input type="text" id="os-modelo-ano" placeholder="Ex: CG 160 Titan / 2024">
               </div>
               <div class="form-group">
-                <label>Moto / Placa</label>
-                <input type="text" id="os-moto" placeholder="Ex: CG 160 Titan - ABC1D23">
+                <label>Placa (XXX-XXXX)</label>
+                <input type="text" id="os-placa" maxlength="8" placeholder="ABC-1D23" oninput="maskPlate(this)">
               </div>
             </div>
 
             <div class="form-row">
               <div class="form-group">
-                <label>Descrição do Serviço (Mão de Obra)</label>
-                <input type="text" id="os-servico-desc" placeholder="Ex: Troca de relação e revisão de freios">
+                <label>Serviço Executado (Mão de Obra)</label>
+                <input type="text" id="os-servico-desc" placeholder="Ex: Troca de relação e revisão">
               </div>
               <div class="form-group">
                 <label>Valor Mão de Obra (R$)</label>
-                <input type="number" id="os-mao-obra" value="0" min="0" step="0.01" oninput="updateOSTotal()">
+                <input type="text" id="os-mao-obra" value="R$ 0,00" oninput="maskCurrency(this); updateOSTotal()">
               </div>
             </div>
 
             <div class="form-group autocomplete-wrapper">
               <label>Adicionar Peça do Estoque (Nome ou Código)</label>
               <div class="inline-input">
-                <input type="text" id="os-part-search" placeholder="Digite 'PEC-001' ou 'Óleo'..." oninput="suggestOSParts()" autocomplete="off">
+                <input type="text" id="os-part-search" placeholder="Digite 'PEC-001' ou nome..." oninput="suggestOSParts()" autocomplete="off">
                 <input type="number" id="os-part-qty" value="1" min="1" style="width: 80px;">
                 <button type="button" onclick="addPartToOS()" class="btn-secondary">+ Add</button>
               </div>
@@ -162,7 +184,7 @@
               <strong id="os-total-display">R$ 0,00</strong>
             </div>
 
-            <button onclick="finalizeOS()" class="btn-primary w-full mt-10">Finalizar OS & Dar Baixa no Estoque</button>
+            <button type="button" id="btn-finalize-os" onclick="finalizeOS()" class="btn-primary w-full mt-10">Finalizar OS & Dar Baixa no Estoque</button>
           </div>
 
           <div class="card">
@@ -189,8 +211,8 @@
       <section id="view-estoque" class="view">
         <header class="view-header">
           <div>
-            <h2>Controle de Estoque</h2>
-            <p>Cadastro com código automático e reposição rápida de mercadorias</p>
+            <h2>Controle de Estoque (Nuvem)</h2>
+            <p>Cadastre novas peças ou registre entradas de reposição</p>
           </div>
         </header>
 
@@ -200,30 +222,30 @@
             <h3>Cadastrar Nova Peça</h3>
             <form onsubmit="registerProduct(event)">
               <div class="form-group">
-                <label>Nome da Peça</label>
+                <label>Nome / Especificação da Peça</label>
                 <input type="text" id="prod-nome" required placeholder="Ex: Kit Relação Honda CG 160">
               </div>
               <div class="form-row">
                 <div class="form-group">
                   <label>Preço de Custo (R$)</label>
-                  <input type="number" id="prod-custo" step="0.01" required>
+                  <input type="text" id="prod-custo" required value="R$ 0,00" oninput="maskCurrency(this)">
                 </div>
                 <div class="form-group">
                   <label>Preço de Venda (R$)</label>
-                  <input type="number" id="prod-venda" step="0.01" required>
+                  <input type="text" id="prod-venda" required value="R$ 0,00" oninput="maskCurrency(this)">
                 </div>
               </div>
               <div class="form-row">
                 <div class="form-group">
-                  <label>Qtd. Inicial</label>
-                  <input type="number" id="prod-qtd" required min="0">
+                  <label>Quantidade Inicial</label>
+                  <input type="number" id="prod-qtd" required min="0" value="1">
                 </div>
                 <div class="form-group">
                   <label>Estoque Mínimo (Alerta)</label>
                   <input type="number" id="prod-min" value="2" min="1">
                 </div>
               </div>
-              <button type="submit" class="btn-primary w-full">Cadastrar Peça (Gerar Código)</button>
+              <button type="submit" class="btn-primary w-full">+ Cadastrar Peça no Sistema</button>
             </form>
           </div>
 
@@ -242,7 +264,7 @@
                 </div>
                 <div class="form-group">
                   <label>Novo Custo Unitário (Opcional)</label>
-                  <input type="number" id="entry-cost" step="0.01" placeholder="Manter atual">
+                  <input type="text" id="entry-cost" placeholder="R$ 0,00" oninput="maskCurrency(this)">
                 </div>
               </div>
               <button type="submit" class="btn-secondary w-full">Confirmar Entrada no Estoque</button>
@@ -255,7 +277,7 @@
           <div class="search-header">
             <h3>Consulta de Produtos em Estoque</h3>
             <div class="autocomplete-wrapper" style="min-width: 300px;">
-              <input type="text" id="stock-search-input" placeholder="Buscar por nome ou código (Ex: PEC-002)..." oninput="filterStockTable()" autocomplete="off">
+              <input type="text" id="stock-search-input" placeholder="Buscar por nome ou código (Ex: PEC-001)..." oninput="filterStockTable()" autocomplete="off">
               <ul id="stock-suggestions" class="suggestions-list hidden"></ul>
             </div>
           </div>
@@ -302,7 +324,7 @@
               </div>
 
               <div class="form-group">
-                <label>Peça Utilizada (ou deixe vazio se for ressarcimento financeiro)</label>
+                <label>Peça Utilizada (ou vazio se for apenas ressarcimento financeiro)</label>
                 <select id="exit-prod-select"></select>
               </div>
 
@@ -312,14 +334,14 @@
                   <input type="number" id="exit-qty" value="1" min="1" required>
                 </div>
                 <div class="form-group" id="exit-extra-cost-group" style="display:none;">
-                  <label>Custo Extra do Ressarcimento (R$)</label>
-                  <input type="number" id="exit-extra-cost" step="0.01" value="0">
+                  <label>Valor do Ressarcimento (R$)</label>
+                  <input type="text" id="exit-extra-cost" value="R$ 0,00" oninput="maskCurrency(this)">
                 </div>
               </div>
 
               <div class="form-group">
                 <label>Observação / Motivo Detalhado</label>
-                <input type="text" id="exit-obs" placeholder="Ex: Carenagem riscada durante manobra, peça reposta" required>
+                <input type="text" id="exit-obs" placeholder="Ex: Venda no balcão / Carenagem reposta" required>
               </div>
 
               <button type="submit" class="btn-primary w-full">Registrar Saída</button>
@@ -398,24 +420,10 @@
     </main>
   </div>
 
-  <!-- PAINEL SECRETO DO PROGRAMADOR (TINYDESK) -->
-  <div id="dev-modal" class="overlay hidden">
-    <div class="license-card">
-      <div class="brand-badge">PAINEL DO DESENVOLVEDOR</div>
-      <h3>Gestão SaaS - TinyDesk Solutions</h3>
-      <p>Controle de assinatura do cliente <strong>MC Motos</strong>.</p>
-      <div class="form-group" style="text-align:left;">
-        <label>Data de Vencimento da Mensalidade:</label>
-        <input type="date" id="dev-expiry-date">
-      </div>
-      <div class="form-row">
-        <button onclick="saveDevSettings()" class="btn-primary">Salvar Validade</button>
-        <button onclick="exportBackup()" class="btn-secondary">Backup JSON</button>
-      </div>
-      <button onclick="document.getElementById('dev-modal').classList.add('hidden')" class="btn-secondary w-full mt-10">Fechar</button>
-    </div>
-  </div>
-
+  <!-- FIREBASE SDKs -->
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore-compat.js"></script>
   <script src="script.js"></script>
 </body>
 </html>
