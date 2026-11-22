@@ -1,91 +1,135 @@
 // ==========================================
 // BANCO DE DADOS LOCAL & DADOS INICIAIS (SEED)
 // ==========================================
-const DB_KEY = 'mcmotos_tinydesk_db_v1';
 
-const defaultData = {
-  config: {
-    expiryDate: '2026-12-31', // Data inicial de validade do SaaS
-    masterKey: 'MCMOTOS-PRO'
-  },
-  products: [
-    { id: 1, code: 'PEC-001', name: 'Óleo Mobil Super Moto 4T 20W50 1L', cost: 24.00, price: 42.00, qty: 18, min: 5 },
-    { id: 2, code: 'PEC-002', name: 'Kit Relação Honda CG 160 Titan/Fan', cost: 78.00, price: 145.00, qty: 6, min: 2 },
-    { id: 3, code: 'PEC-003', name: 'Pastilha de Freio Dianteira Cobreq', cost: 19.50, price: 45.00, qty: 10, min: 3 },
-    { id: 4, code: 'PEC-004', name: 'Vela de Ignição NGK CPR8EA-9', cost: 18.00, price: 35.00, qty: 12, min: 4 },
-    { id: 5, code: 'PEC-005', name: 'Câmara de Ar Aro 18 Pirelli', cost: 26.00, price: 50.00, qty: 8, min: 3 },
-    { id: 6, code: 'PEC-006', name: 'Filtro de Óleo Yamaha Fazer 250', cost: 15.00, price: 32.00, qty: 9, min: 3 },
-    { id: 6, code: 'PEC-007', name: 'Kit relação Honda CG 125 FAN 2009 - 2013', cost: 15.00, price: 60, qty: 9, min: 3 }
-  ],
-  orders: [
-    {
-      id: 1,
-      code: 'OS-001',
-      date: getTodayISO(),
-      client: 'Carlos Eduardo',
-      moto: 'Honda CG 160 Fan - BRA2E19',
-      serviceDesc: 'Troca de óleo e kit relação completo',
-      labor: 60.00,
-      parts: [
-        { code: 'PEC-001', name: 'Óleo Mobil Super Moto 4T 20W50 1L', qty: 1, price: 42.00, cost: 24.00 },
-        { code: 'PEC-002', name: 'Kit Relação Honda CG 160 Titan/Fan', qty: 1, price: 145.00, cost: 78.00 }
-      ],
-      totalRevenue: 247.00,
-      totalCost: 102.00
-    }
-  ],
-  exits: [
-    {
-      id: 1,
-      date: getTodayISO(),
-      type: 'venda',
-      prodCode: 'PEC-004',
-      prodName: 'Vela de Ignição NGK CPR8EA-9',
-      qty: 1,
-      revenue: 35.00,
-      cost: 18.00,
-      obs: 'Venda direta no balcão'
-    }
-  ]
+const firebaseConfig = {
+  apiKey: "SUA_API_KEY",
+  authDomain: "SEU_PROJETO.firebaseapp.com",
+  projectId: "SEU_PROJETO_ID",
+  storageBucket: "SEU_PROJETO.appspot.com",
+  messagingSenderId: "SEU_SENDER_ID",
+  appId: "SEU_APP_ID"
 };
 
-let db = JSON.parse(localStorage.getItem(DB_KEY)) || defaultData;
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const firestore = firebase.firestore();
+
+// Estado em memória alimentado 100% pelo Firebase (sem dados chumbados)
+let db = {
+  products: [],
+  orders: [],
+  exits: []
+};
+
 let currentOSParts = [];
 let selectedPartForOS = null;
-let devClicks = 0;
 
-function saveDB() {
-  localStorage.setItem(DB_KEY, JSON.stringify(db));
+// ==========================================
+// 2. FORMATAÇÃO E MÁSCARAS DE INPUTS
+// ==========================================
+function maskCurrency(input) {
+  let value = input.value.replace(/\D/g, '');
+  if (!value) value = '0';
+  const floatVal = parseInt(value, 10) / 100;
+  input.value = floatVal.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function parseCurrency(formattedStr) {
+  if (!formattedStr) return 0;
+  const clean = formattedStr.replace(/[R$\s.]/g, '').replace(',', '.');
+  return parseFloat(clean) || 0;
+}
+
+function formatBRL(val) {
+  return (val || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
+}
+
+function maskPlate(input) {
+  let val = input.value.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  if (val.length > 3) {
+    val = val.slice(0, 3) + '-' + val.slice(3, 7);
+  }
+  input.value = val;
 }
 
 function getTodayISO() {
   const now = new Date();
-  return now.toISOString().split('T')[0];
-}
-
-function formatBRL(val) {
-  return val.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
-}
-
-
-function exportBackup() {
-  const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(db, null, 2));
-  const dlAnchor = document.createElement('a');
-  dlAnchor.setAttribute("href", dataStr);
-  dlAnchor.setAttribute("download", `backup_mcmotos_${getTodayISO()}.json`);
-  document.body.appendChild(dlAnchor);
-  dlAnchor.click();
-  dlAnchor.remove();
+  const offset = now.getTimezoneOffset() * 60000;
+  return new Date(now - offset).toISOString().split('T')[0];
 }
 
 // ==========================================
-// NAVEGAÇÃO SPA
+// 3. AUTENTICAÇÃO (LOGIN & LOGOUT)
 // ==========================================
-function navigate(viewId) {
+auth.onAuthStateChanged(user => {
+  const loginOverlay = document.getElementById('login-overlay');
+  const appContainer = document.getElementById('app-container');
+
+  if (user) {
+    loginOverlay.classList.add('hidden');
+    appContainer.classList.remove('hidden');
+    document.getElementById('dash-month').value = getTodayISO().slice(0, 7);
+    initRealtimeSync();
+  } else {
+    loginOverlay.classList.remove('hidden');
+    appContainer.classList.add('hidden');
+  }
+});
+
+async function handleLogin(e) {
+  e.preventDefault();
+  const email = document.getElementById('login-email').value.trim();
+  const pass = document.getElementById('login-password').value;
+  const msg = document.getElementById('login-msg');
+  const btn = document.getElementById('btn-login');
+
+  msg.textContent = '';
+  btn.textContent = 'Entrando...';
+  btn.disabled = true;
+
+  try {
+    await auth.signInWithEmailAndPassword(email, pass);
+  } catch (err) {
+    msg.textContent = 'E-mail ou senha inválidos. Verifique seus dados.';
+  } finally {
+    btn.textContent = 'Acessar Painel';
+    btn.disabled = false;
+  }
+}
+
+function handleLogout() {
+  auth.signOut();
+}
+
+// ==========================================
+// 4. SINCRONIZAÇÃO EM TEMPO REAL (FIRESTORE)
+// ==========================================
+function initRealtimeSync() {
+  // Escuta Estoque
+  firestore.collection('products').orderBy('code').onSnapshot(snap => {
+    db.products = snap.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+    refreshAllViews();
+  });
+
+  // Escuta Ordens de Serviço
+  firestore.collection('orders').orderBy('createdAt', 'desc').onSnapshot(snap => {
+    db.orders = snap.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+    refreshAllViews();
+  });
+
+  // Escuta Saídas e Ocorrências
+  firestore.collection('exits').orderBy('createdAt', 'desc').onSnapshot(snap => {
+    db.exits = snap.docs.map(doc => ({ docId: doc.id, ...doc.data() }));
+    refreshAllViews();
+  });
+}
+
+function navigate(viewId, btnElement) {
   document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
   document.getElementById(`view-${viewId}`).classList.add('active');
-  event.currentTarget.classList.add('active');
+  if (btnElement) btnElement.classList.add('active');
   refreshAllViews();
 }
 
@@ -99,48 +143,56 @@ function refreshAllViews() {
 }
 
 // ==========================================
-// 1. ESTOQUE & ENTRADAS AUTOMÁTICAS
+// 5. ESTOQUE & ENTRADAS (FIREBASE)
 // ==========================================
-function registerProduct(e) {
+async function registerProduct(e) {
   e.preventDefault();
   const nextNum = db.products.length + 1;
   const code = `PEC-${String(nextNum).padStart(3, '0')}`;
 
   const newProd = {
-    id: Date.now(),
     code,
     name: document.getElementById('prod-nome').value.trim(),
-    cost: parseFloat(document.getElementById('prod-custo').value),
-    price: parseFloat(document.getElementById('prod-venda').value),
-    qty: parseInt(document.getElementById('prod-qtd').value),
-    min: parseInt(document.getElementById('prod-min').value)
+    cost: parseCurrency(document.getElementById('prod-custo').value),
+    price: parseCurrency(document.getElementById('prod-venda').value),
+    qty: parseInt(document.getElementById('prod-qtd').value, 10),
+    min: parseInt(document.getElementById('prod-min').value, 10),
+    createdAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  db.products.push(newProd);
-  saveDB();
-  e.target.reset();
-  refreshAllViews();
-  alert(`Peça cadastrada com código interno: ${code}`);
+  try {
+    await firestore.collection('products').add(newProd);
+    e.target.reset();
+    document.getElementById('prod-custo').value = 'R$ 0,00';
+    document.getElementById('prod-venda').value = 'R$ 0,00';
+    alert(`Peça cadastrada no banco com código: ${code}`);
+  } catch (err) {
+    alert('Erro ao salvar peça: ' + err.message);
+  }
 }
 
-function registerStockEntry(e) {
+async function registerStockEntry(e) {
   e.preventDefault();
-  const prodId = parseInt(document.getElementById('entry-prod-select').value);
-  const qty = parseInt(document.getElementById('entry-qty').value);
-  const newCost = parseFloat(document.getElementById('entry-cost').value);
+  const docId = document.getElementById('entry-prod-select').value;
+  const qty = parseInt(document.getElementById('entry-qty').value, 10);
+  const newCost = parseCurrency(document.getElementById('entry-cost').value);
 
-  const prod = db.products.find(p => p.id === prodId);
-  if (!prod) return;
+  if (!docId) return;
 
-  prod.qty += qty;
-  if (!isNaN(newCost) && newCost > 0) {
-    prod.cost = newCost;
+  const updateData = {
+    qty: firebase.firestore.FieldValue.increment(qty)
+  };
+  if (newCost > 0) {
+    updateData.cost = newCost;
   }
 
-  saveDB();
-  e.target.reset();
-  refreshAllViews();
-  alert(`Entrada registrada! Novo saldo de ${prod.name}: ${prod.qty} un.`);
+  try {
+    await firestore.collection('products').doc(docId).update(updateData);
+    e.target.reset();
+    alert('Entrada de estoque registrada com sucesso!');
+  } catch (err) {
+    alert('Erro ao atualizar estoque: ' + err.message);
+  }
 }
 
 function renderStock(filterText = '') {
@@ -151,6 +203,11 @@ function renderStock(filterText = '') {
     p.name.toLowerCase().includes(filterText.toLowerCase()) ||
     p.code.toLowerCase().includes(filterText.toLowerCase())
   );
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="6">Nenhuma peça cadastrada no estoque.</td></tr>';
+    return;
+  }
 
   filtered.forEach(p => {
     const isLow = p.qty <= p.min;
@@ -203,15 +260,15 @@ function selectStockSuggestion(code) {
 
 function renderSelectOptions() {
   const optionsHTML = db.products.map(p =>
-    `<option value="${p.id}">${p.code} - ${p.name} (Saldo: ${p.qty})</option>`
+    `<option value="${p.docId}">${p.code} - ${p.name} (Saldo: ${p.qty})</option>`
   ).join('');
 
-  document.getElementById('entry-prod-select').innerHTML = optionsHTML;
+  document.getElementById('entry-prod-select').innerHTML = optionsHTML || '<option value="">Cadastre uma peça primeiro</option>';
   document.getElementById('exit-prod-select').innerHTML = `<option value="">-- Nenhuma peça (apenas financeiro) --</option>` + optionsHTML;
 }
 
 // ==========================================
-// 2. ORDEM DE SERVIÇO (OS)
+// 6. ORDEM DE SERVIÇO (OS) COM BAIXA AUTOMÁTICA
 // ==========================================
 function suggestOSParts() {
   const val = document.getElementById('os-part-search').value.trim().toLowerCase();
@@ -229,7 +286,7 @@ function suggestOSParts() {
 
   if (matches.length > 0) {
     list.innerHTML = matches.map(p => `
-      <li onclick="pickOSPart(${p.id})">
+      <li onclick="pickOSPart('${p.docId}')">
         <span><strong>${p.code}</strong> - ${p.name}</span>
         <span>${formatBRL(p.price)} (${p.qty} disp.)</span>
       </li>
@@ -240,8 +297,8 @@ function suggestOSParts() {
   }
 }
 
-function pickOSPart(id) {
-  const prod = db.products.find(p => p.id === id);
+function pickOSPart(docId) {
+  const prod = db.products.find(p => p.docId === docId);
   if (!prod) return;
   selectedPartForOS = prod;
   document.getElementById('os-part-search').value = `${prod.code} - ${prod.name}`;
@@ -250,7 +307,7 @@ function pickOSPart(id) {
 
 function addPartToOS() {
   const searchVal = document.getElementById('os-part-search').value.trim().toLowerCase();
-  const qty = parseInt(document.getElementById('os-part-qty').value);
+  const qty = parseInt(document.getElementById('os-part-qty').value, 10);
 
   const prod = selectedPartForOS || db.products.find(p =>
     p.code.toLowerCase() === searchVal || p.name.toLowerCase() === searchVal
@@ -260,17 +317,20 @@ function addPartToOS() {
     alert('Selecione uma peça válida da lista de sugestões.');
     return;
   }
-  if (qty > prod.qty) {
-    alert(`Estoque insuficiente! Saldo atual: ${prod.qty}`);
+
+  const alreadyAdded = currentOSParts.find(item => item.docId === prod.docId);
+  const totalRequested = (alreadyAdded ? alreadyAdded.qty : 0) + qty;
+
+  if (totalRequested > prod.qty) {
+    alert(`Estoque insuficiente! Saldo disponível: ${prod.qty}`);
     return;
   }
 
-  const existing = currentOSParts.find(item => item.code === prod.code);
-  if (existing) {
-    existing.qty += qty;
+  if (alreadyAdded) {
+    alreadyAdded.qty += qty;
   } else {
     currentOSParts.push({
-      id: prod.id,
+      docId: prod.docId,
       code: prod.code,
       name: prod.name,
       qty: qty,
@@ -305,76 +365,101 @@ function renderSelectedOSParts() {
 }
 
 function updateOSTotal() {
-  const labor = parseFloat(document.getElementById('os-mao-obra').value) || 0;
+  const labor = parseCurrency(document.getElementById('os-mao-obra').value);
   const partsTotal = currentOSParts.reduce((acc, item) => acc + (item.price * item.qty), 0);
   document.getElementById('os-total-display').textContent = formatBRL(labor + partsTotal);
 }
 
-function finalizeOS() {
+async function finalizeOS() {
   const client = document.getElementById('os-cliente').value.trim();
-  const moto = document.getElementById('os-moto').value.trim();
+  const modeloAno = document.getElementById('os-modelo-ano').value.trim();
+  const placa = document.getElementById('os-placa').value.trim();
   const serviceDesc = document.getElementById('os-servico-desc').value.trim();
-  const labor = parseFloat(document.getElementById('os-mao-obra').value) || 0;
+  const labor = parseCurrency(document.getElementById('os-mao-obra').value);
 
   if (!client || !serviceDesc) {
-    alert('Preencha pelo menos o nome do cliente e o serviço realizado.');
+    alert('Preencha pelo menos o nome do cliente e o serviço executado.');
     return;
   }
 
-  // Baixa automática no estoque
-  currentOSParts.forEach(item => {
-    const prod = db.products.find(p => p.code === item.code);
-    if (prod) prod.qty -= item.qty;
-  });
+  const btn = document.getElementById('btn-finalize-os');
+  btn.disabled = true;
+  btn.textContent = 'Processando OS e Baixa no Estoque...';
 
-  const partsRevenue = currentOSParts.reduce((acc, i) => acc + (i.price * i.qty), 0);
-  const partsCost = currentOSParts.reduce((acc, i) => acc + (i.cost * i.qty), 0);
+  try {
+    const batch = firestore.batch();
 
-  const newOS = {
-    id: Date.now(),
-    code: `OS-${String(db.orders.length + 1).padStart(3, '0')}`,
-    date: getTodayISO(),
-    client,
-    moto,
-    serviceDesc,
-    labor,
-    parts: [...currentOSParts],
-    totalRevenue: labor + partsRevenue,
-    totalCost: partsCost
-  };
+    // 1. Subtrai automaticamente cada peça vendida na OS do estoque no Firestore
+    currentOSParts.forEach(item => {
+      const prodRef = firestore.collection('products').doc(item.docId);
+      batch.update(prodRef, {
+        qty: firebase.firestore.FieldValue.increment(-item.qty)
+      });
+    });
 
-  db.orders.unshift(newOS);
-  saveDB();
+    // 2. Calcula valores recebidos e custos
+    const partsRevenue = currentOSParts.reduce((acc, i) => acc + (i.price * i.qty), 0);
+    const partsCost = currentOSParts.reduce((acc, i) => acc + (i.cost * i.qty), 0);
 
-  // Limpa formulário
-  document.getElementById('os-cliente').value = '';
-  document.getElementById('os-moto').value = '';
-  document.getElementById('os-servico-desc').value = '';
-  document.getElementById('os-mao-obra').value = 0;
-  currentOSParts = [];
-  renderSelectedOSParts();
-  refreshAllViews();
-  openPrintOS(newOS.id);
+    const newOSRef = firestore.collection('orders').doc();
+    const osData = {
+      code: `OS-${String(db.orders.length + 1).padStart(3, '0')}`,
+      date: getTodayISO(),
+      client,
+      modeloAno: modeloAno || 'Não informado',
+      placa: placa || 'Sem placa',
+      serviceDesc,
+      labor,
+      parts: currentOSParts.map(({ docId, ...rest }) => rest),
+      totalRevenue: labor + partsRevenue,
+      totalCost: partsCost,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    };
+
+    batch.set(newOSRef, osData);
+    await batch.commit();
+
+    // Limpa formulário
+    document.getElementById('os-cliente').value = '';
+    document.getElementById('os-modelo-ano').value = '';
+    document.getElementById('os-placa').value = '';
+    document.getElementById('os-servico-desc').value = '';
+    document.getElementById('os-mao-obra').value = 'R$ 0,00';
+    currentOSParts = [];
+    renderSelectedOSParts();
+
+    openPrintOS(newOSRef.id);
+  } catch (err) {
+    alert('Erro ao finalizar Ordem de Serviço: ' + err.message);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Finalizar OS & Dar Baixa no Estoque';
+  }
 }
 
 function renderOSHistory() {
   const tbody = document.getElementById('os-history-body');
+  if (db.orders.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5">Nenhuma OS registrada ainda.</td></tr>';
+    return;
+  }
+
   tbody.innerHTML = db.orders.map(os => `
     <tr>
       <td><strong>${os.code}</strong></td>
       <td>${os.date.split('-').reverse().join('/')}</td>
-      <td>${os.client}<br><small style="color:#64748b">${os.moto}</small></td>
+      <td>${os.client}<br><small style="color:#64748b">${os.modeloAno} • ${os.placa}</small></td>
       <td><strong>${formatBRL(os.totalRevenue)}</strong></td>
-      <td><button onclick="openPrintOS(${os.id})" class="btn-secondary">📄 Ver / PDF</button></td>
+      <td><button onclick="openPrintOS('${os.docId}')" class="btn-secondary">📄 Ver / PDF</button></td>
     </tr>
   `).join('');
 }
 
-function openPrintOS(id) {
-  const os = db.orders.find(o => o.id === id);
+function openPrintOS(docId) {
+  const os = db.orders.find(o => o.docId === docId);
   if (!os) return;
 
-  const partsRows = os.parts.map(p => `
+  const partsRows = (os.parts || []).map(p => `
     <tr>
       <td>${p.code}</td>
       <td>${p.name}</td>
@@ -395,7 +480,8 @@ function openPrintOS(id) {
         <span>Data: ${os.date.split('-').reverse().join('/')}</span>
       </div>
     </div>
-    <p><strong>Cliente:</strong> ${os.client} | <strong>Veículo:</strong> ${os.moto}</p>
+    <p><strong>Cliente:</strong> ${os.client}</p>
+    <p><strong>Moto / Ano:</strong> ${os.modeloAno} | <strong>Placa:</strong> ${os.placa}</p>
     <p style="margin: 10px 0;"><strong>Serviço Executado:</strong> ${os.serviceDesc}</p>
     <table style="margin-top:15px;">
       <thead>
@@ -431,7 +517,7 @@ function closePrintModal() {
 }
 
 // ==========================================
-// 3. SAÍDAS & OCORRÊNCIAS ATÍPICAS
+// 7. SAÍDAS & OCORRÊNCIAS ATÍPICAS (FIREBASE)
 // ==========================================
 function toggleExitFields() {
   const type = document.getElementById('exit-type').value;
@@ -439,12 +525,12 @@ function toggleExitFields() {
     type === 'ressarcimento' ? 'block' : 'none';
 }
 
-function registerStockExit(e) {
+async function registerStockExit(e) {
   e.preventDefault();
   const type = document.getElementById('exit-type').value;
-  const prodId = parseInt(document.getElementById('exit-prod-select').value);
-  const qty = parseInt(document.getElementById('exit-qty').value);
-  const extraCost = parseFloat(document.getElementById('exit-extra-cost').value) || 0;
+  const prodDocId = document.getElementById('exit-prod-select').value;
+  const qty = parseInt(document.getElementById('exit-qty').value, 10);
+  const extraCost = parseCurrency(document.getElementById('exit-extra-cost').value);
   const obs = document.getElementById('exit-obs').value.trim();
 
   let prodCode = '-';
@@ -452,42 +538,53 @@ function registerStockExit(e) {
   let revenue = 0;
   let cost = extraCost;
 
-  if (prodId) {
-    const prod = db.products.find(p => p.id === prodId);
-    if (!prod || prod.qty < qty) {
-      alert('Estoque insuficiente para esta saída!');
-      return;
-    }
-    prod.qty -= qty;
-    prodCode = prod.code;
-    prodName = prod.name;
+  try {
+    const batch = firestore.batch();
 
-    if (type === 'venda') {
-      revenue = prod.price * qty;
-      cost = prod.cost * qty;
-    } else {
-      // Avaria, insumo ou ressarcimento: entra apenas como custo/prejuízo
-      cost += prod.cost * qty;
+    if (prodDocId) {
+      const prod = db.products.find(p => p.docId === prodDocId);
+      if (!prod || prod.qty < qty) {
+        alert('Estoque insuficiente para esta saída!');
+        return;
+      }
+
+      const prodRef = firestore.collection('products').doc(prodDocId);
+      batch.update(prodRef, {
+        qty: firebase.firestore.FieldValue.increment(-qty)
+      });
+
+      prodCode = prod.code;
+      prodName = prod.name;
+
+      if (type === 'venda') {
+        revenue = prod.price * qty;
+        cost = prod.cost * qty;
+      } else {
+        cost += prod.cost * qty;
+      }
     }
+
+    const exitRef = firestore.collection('exits').doc();
+    batch.set(exitRef, {
+      date: getTodayISO(),
+      type,
+      prodCode,
+      prodName,
+      qty: prodDocId ? qty : 0,
+      revenue,
+      cost,
+      obs,
+      createdAt: firebase.firestore.FieldValue.serverTimestamp()
+    });
+
+    await batch.commit();
+    e.target.reset();
+    document.getElementById('exit-extra-cost').value = 'R$ 0,00';
+    toggleExitFields();
+    alert('Movimentação registrada com sucesso!');
+  } catch (err) {
+    alert('Erro ao registrar saída: ' + err.message);
   }
-
-  db.exits.unshift({
-    id: Date.now(),
-    date: getTodayISO(),
-    type,
-    prodCode,
-    prodName,
-    qty: prodId ? qty : 0,
-    revenue,
-    cost,
-    obs
-  });
-
-  saveDB();
-  e.target.reset();
-  toggleExitFields();
-  refreshAllViews();
-  alert('Movimentação registrada com sucesso!');
 }
 
 function renderExitsHistory() {
@@ -498,7 +595,13 @@ function renderExitsHistory() {
     ressarcimento: '<span class="badge badge-low">Ressarcimento</span>'
   };
 
-  document.getElementById('exits-history-body').innerHTML = db.exits.map(ex => `
+  const tbody = document.getElementById('exits-history-body');
+  if (db.exits.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="5">Nenhuma saída registrada.</td></tr>';
+    return;
+  }
+
+  tbody.innerHTML = db.exits.map(ex => `
     <tr>
       <td>${ex.date.split('-').reverse().join('/')}</td>
       <td>${labels[ex.type]}</td>
@@ -512,15 +615,17 @@ function renderExitsHistory() {
 }
 
 // ==========================================
-// 4. FECHAMENTO QUINZENAL & MARGEM
+// 8. FECHAMENTO QUINZENAL & MARGEM
 // ==========================================
 function renderDashboard() {
-  const monthVal = document.getElementById('dash-month').value; // YYYY-MM
-  const period = document.getElementById('dash-period').value; // q1, q2, all
+  const monthVal = document.getElementById('dash-month').value;
+  const period = document.getElementById('dash-period').value;
+
+  if (!monthVal) return;
 
   const filterByPeriod = (dateStr) => {
-    if (!dateStr.startsWith(monthVal)) return false;
-    const day = parseInt(dateStr.split('-')[2]);
+    if (!dateStr || !dateStr.startsWith(monthVal)) return false;
+    const day = parseInt(dateStr.split('-')[2], 10);
     if (period === 'q1') return day <= 15;
     if (period === 'q2') return day >= 16;
     return true;
@@ -582,7 +687,7 @@ function renderDashboard() {
 }
 
 // ==========================================
-// 5. RANKING DE VENDAS & FILTRO DE DATA
+// 9. RANKING DE VENDAS & FILTRO DE DATA
 // ==========================================
 function clearRankDate() {
   document.getElementById('rank-date-filter').value = '';
@@ -603,7 +708,7 @@ function renderRanking() {
   db.orders.forEach(o => {
     if (dateFilter && o.date !== dateFilter) return;
     dayTotals[o.date] = (dayTotals[o.date] || 0) + o.totalRevenue;
-    o.parts.forEach(p => addProdStat(p.code, p.name, p.qty, p.price * p.qty));
+    (o.parts || []).forEach(p => addProdStat(p.code, p.name, p.qty, p.price * p.qty));
   });
 
   db.exits.forEach(ex => {
@@ -613,7 +718,6 @@ function renderRanking() {
     addProdStat(ex.prodCode, ex.prodName, ex.qty, ex.revenue);
   });
 
-  // Ranking Dias
   const rankedDays = Object.entries(dayTotals).sort((a, b) => b[1] - a[1]);
   document.getElementById('rank-days-body').innerHTML = rankedDays.map(([date, val], idx) => `
     <tr>
@@ -623,7 +727,6 @@ function renderRanking() {
     </tr>
   `).join('') || '<tr><td colspan="3">Sem dados para a data selecionada.</td></tr>';
 
-  // Ranking Produtos
   const rankedProds = Object.values(prodTotals).sort((a, b) => b.qty - a.qty);
   document.getElementById('rank-products-body').innerHTML = rankedProds.map(p => `
     <tr>
