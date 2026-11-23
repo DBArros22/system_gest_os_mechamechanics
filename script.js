@@ -3,13 +3,14 @@
 // ==========================================
 
 const firebaseConfig = {
-  apiKey: "SUA_API_KEY",
-  authDomain: "SEU_PROJETO.firebaseapp.com",
-  projectId: "SEU_PROJETO_ID",
-  storageBucket: "SEU_PROJETO.appspot.com",
-  messagingSenderId: "SEU_SENDER_ID",
-  appId: "SEU_APP_ID"
-};
+    apiKey: "AIzaSyBc-m8z_4s9ntQ_vgvpqxX_XdpSbGUiXJc",
+    authDomain: "system-gestos-mcmotos.firebaseapp.com",
+    projectId: "system-gestos-mcmotos",
+    storageBucket: "system-gestos-mcmotos.firebasestorage.app",
+    messagingSenderId: "775485221125",
+    appId: "1:775485221125:web:2b8ef6e909d7f93983af6c",
+    measurementId: "G-57LCNLEFC6"
+  };
 
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
